@@ -1,11 +1,17 @@
+import argparse
 import sys
 
+from .features import PRESETS
 from .graph import build_graph
 
 
 def main() -> None:
-    graph = build_graph()
-    print("SQL ajanı hazır. Çıkış: boş satır / Ctrl+C")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--preset", default="full", choices=PRESETS)
+    args = ap.parse_args()
+    graph = build_graph(PRESETS[args.preset])
+    history: list[dict] = []
+    print(f"SQL ajanı hazır (preset={args.preset}). Çıkış: boş satır / Ctrl+C")
     while True:
         try:
             q = input("\nSoru> ").strip()
@@ -13,8 +19,9 @@ def main() -> None:
             break
         if not q:
             break
-        out = graph.invoke({"question": q})
-        print(f"\nSQL ({out['attempts']} deneme, {out['tokens']} token):\n{out['sql']}\n")
+        out = graph.invoke({"question": q, "history": history})
+        history.append({"q": out["standalone"], "sql": out.get("sql", "")})
+        print(f"\nSQL ({out['attempts']} deneme, {out['tokens']} token):\n{out.get('sql', '')}\n")
         print(out["answer"])
 
 

@@ -50,7 +50,7 @@ def _fmt(v) -> str:
     return s if len(s) <= 40 else s[:37] + "..."
 
 
-def get_schema(table: str, db_path: str = DB_PATH, n_samples: int = 3) -> str:
+def get_schema(table: str, db_path: str = DB_PATH, n_samples: int = 3, values: dict[str, list[str]] | None = None) -> str:
     if table not in list_tables(db_path):
         raise ValueError(f"unknown table: {table}")
     with connect(db_path) as c:
@@ -62,6 +62,8 @@ def get_schema(table: str, db_path: str = DB_PATH, n_samples: int = 3) -> str:
     lines = [f'TABLE "{table}"']
     for _, name, typ, _notnull, _dflt, pk in cols:
         lines.append(f'  - "{name}" {typ or "?"}{" PRIMARY KEY" if pk else ""}')
+        if values and name in values:
+            lines[-1] += "  values: " + ", ".join(f"'{v}'" for v in values[name])
     for fk in fks:
         lines.append(f'  FK "{fk[3]}" -> "{fk[2]}"."{fk[4]}"')
     if samples:
@@ -71,8 +73,12 @@ def get_schema(table: str, db_path: str = DB_PATH, n_samples: int = 3) -> str:
     return "\n".join(lines)
 
 
-def full_schema(db_path: str = DB_PATH) -> str:
-    return "\n\n".join(get_schema(t, db_path) for t in list_tables(db_path))
+def full_schema(db_path: str = DB_PATH, tables: list[str] | None = None, values_fn=None) -> str:
+    """Schema text for `tables` (default: all). values_fn(db_path, table) -> {column: [values]} adds value lists."""
+    return "\n\n".join(
+        get_schema(t, db_path, values=values_fn(db_path, t) if values_fn else None)
+        for t in (tables or list_tables(db_path))
+    )
 
 
 def run_query(sql: str, db_path: str = DB_PATH, max_rows: int = MAX_ROWS) -> tuple[list[str], list[tuple]]:
