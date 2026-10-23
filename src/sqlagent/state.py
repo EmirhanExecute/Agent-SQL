@@ -6,6 +6,7 @@ class AgentState(TypedDict, total=False):
     schema: str
     sql: str
     error: str
+    blocked: bool
     attempts: int
     columns: list[str]
     rows: list[tuple]
