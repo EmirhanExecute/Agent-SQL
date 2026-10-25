@@ -21,7 +21,8 @@ os.environ.setdefault("LLM_CACHE", "1")
 from sqlagent.features import PRESETS  # noqa: E402
 from sqlagent.graph import build_graph  # noqa: E402
 
-LEVELS = ["easy", "medium", "hard"]
+LEVELS = ["easy", "medium", "hard", "unanswerable", "ambiguous"]
+ACCEPTED = {"cannot_answer": {"cannot_answer"}, "clarify": {"clarify"}}
 
 
 def norm_row(r) -> tuple[tuple, tuple]:
@@ -51,8 +52,13 @@ def run_one(graph, q: dict, db_path: str) -> dict:
     try:
         out = graph.invoke({"question": q["q"], "history": []})
         err = out.get("error", "")
-        correct = (not err) and same_result(out.get("rows", []), gold_rows(db_path, q["sql"]))
-        return {"id": q["id"], "level": q["level"], "correct": bool(correct), "sql": out.get("sql", ""),
+        expect = q.get("expect", "sql")
+        if expect == "sql":
+            correct = (not out.get("abstain")) and (not err) and same_result(out.get("rows", []), gold_rows(db_path, q["sql"]))
+        else:  # must abstain in the expected way and never execute SQL; a security block also counts as refusing
+            kind = out.get("abstain") or ("cannot_answer" if out.get("blocked") else "")
+            correct = kind in ACCEPTED[expect] and not out.get("rows")
+        return {"id": q["id"], "level": q["level"], "correct": bool(correct), "sql": out.get("sql", "") or out.get("answer", ""),
                 "error": err, "attempts": out.get("attempts", 0), "tokens": out.get("tokens", 0),
                 "llm_seconds": out.get("llm_seconds", 0.0), "wall_seconds": time.perf_counter() - t0}
     except Exception as e:
@@ -86,8 +92,8 @@ def summarize(name: str, rs: list[dict]) -> dict:
 
 def print_table(summaries: list[dict], title: str) -> str:
     lines = [f"### {title}", "",
-             "| Config | Execution accuracy (95% CI) | easy | medium | hard | tokens/q | attempts/q | LLM s p50 | p95 |",
-             "|---|---|---|---|---|---|---|---|---|"]
+             "| Config | Execution accuracy (95% CI) | easy | medium | hard | unanswerable | ambiguous | tokens/q | attempts/q | LLM s p50 | p95 |",
+             "|---|---|---|---|---|---|---|---|---|---|---|"]
     for s in summaries:
         lv = " | ".join(f"{a}/{b}" for a, b in (s["by_level"][l] for l in LEVELS))
         lines.append(f"| {s['config']} | {s['acc']:.0%} ({s['correct']}/{s['n']}; {s['ci'][0]:.0%}-{s['ci'][1]:.0%}) | {lv} "
@@ -117,7 +123,11 @@ def main() -> None:
     for name in args.configs.split(","):
         graph = build_graph(PRESETS[name], with_answer=False, db_path=db_path)
         with ThreadPoolExecutor(args.workers) as ex:
-            rs = list(ex.map(lambda q: run_one(graph, q, db_path), qs))
+            def task(q, name=name):
+                r = run_one(graph, q, db_path)
+                print(f"  [{args.db}/{name}] {r['id']} {'ok' if r['correct'] else 'FAIL'} ({r['wall_seconds']:.0f}s)", flush=True)
+                return r
+            rs = list(ex.map(task, qs))
         details[name] = rs
         summaries.append(summarize(name, rs))
         s = summaries[-1]
@@ -130,7 +140,7 @@ def main() -> None:
     (out_dir / f"{stamp}-{args.db}.json").write_text(json.dumps(details, indent=1, ensure_ascii=False), encoding="utf-8")
     (out_dir / f"{stamp}-{args.db}.md").write_text(table, encoding="utf-8")
     fails = [(n, r) for n, rs in details.items() for r in rs if not r["correct"] and n == args.configs.split(",")[-1]]
-    for n, r in fails:
+    for n, r in fails[:15]:
         print(f"[{n}] FAIL {r['id']}: {r['error'] or 'wrong result'}\n     {r['sql'][:200]}")
 
 

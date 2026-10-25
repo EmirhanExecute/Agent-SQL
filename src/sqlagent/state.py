@@ -12,6 +12,7 @@ class AgentState(TypedDict, total=False):
     sql: str
     error: str
     blocked: bool
+    abstain: str             # '' | 'cannot_answer' | 'clarify'
     attempts: int
     columns: list[str]
     rows: list[tuple]

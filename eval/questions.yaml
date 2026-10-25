@@ -51,3 +51,47 @@
 - {id: s24, split: test, level: hard, q: "Total revenue per month in 1996, in chronological order.", sql: "SELECT strftime('%Y-%m', o.OrderDate) AS m, ROUND(SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)), 2) FROM Orders o JOIN \"Order Details\" od ON od.OrderID = o.OrderID WHERE strftime('%Y', o.OrderDate) = '1996' GROUP BY m ORDER BY m"}
 - {id: s25, split: test, level: hard, q: "Average number of items (total quantity) per order.", sql: "SELECT ROUND(AVG(n), 2) FROM (SELECT OrderID, SUM(Quantity) AS n FROM \"Order Details\" GROUP BY OrderID)"}
 - {id: s26, split: test, level: hard, q: "Toplam tutarı 5000'in üzerinde olan siparişleri ve tutarlarını listele.", sql: "SELECT OrderID, ROUND(SUM(UnitPrice * Quantity * (1 - Discount)), 2) AS total FROM \"Order Details\" GROUP BY OrderID HAVING total > 5000"}
+# --- TRAIN (extra) ---
+- {id: t25, split: train, level: easy, q: "How many customers are from the United States?", sql: "SELECT COUNT(*) FROM Customers WHERE Country = 'USA'"}
+- {id: t26, split: train, level: easy, q: "UK'deki tedarikçiler kimler?", sql: "SELECT CompanyName FROM Suppliers WHERE Country = 'UK'"}
+- {id: t27, split: train, level: medium, q: "Which products have fewer units in stock than their reorder level?", sql: "SELECT ProductName FROM Products WHERE UnitsInStock < ReorderLevel"}
+- {id: t28, split: train, level: hard, q: "Which employees are managers, i.e. have at least one direct report? Give full names.", sql: "SELECT m.FirstName || ' ' || m.LastName FROM Employees m WHERE EXISTS (SELECT 1 FROM Employees e WHERE e.ReportsTo = m.EmployeeID)"}
+- {id: t29, split: train, level: medium, q: "Which orders contain more than 4 different products?", sql: "SELECT OrderID FROM \"Order Details\" GROUP BY OrderID HAVING COUNT(*) > 4"}
+- {id: t30, split: train, level: medium, q: "What is the average number of days between order date and required date?", sql: "SELECT ROUND(AVG(julianday(RequiredDate) - julianday(OrderDate)), 2) FROM Orders"}
+- {id: t31, split: train, level: easy, q: "What is the contact name of the customer 'Hanari Carnes'?", sql: "SELECT ContactName FROM Customers WHERE CompanyName = 'Hanari Carnes'"}
+- {id: t32, split: train, level: unanswerable, expect: cannot_answer, q: "What is the profit margin of each product?", sql: "CANNOT_ANSWER: the database has selling prices but no product cost data."}
+- {id: t33, split: train, level: unanswerable, expect: cannot_answer, q: "Show customer satisfaction ratings.", sql: "CANNOT_ANSWER: there is no ratings or satisfaction data in the database."}
+- {id: t34, split: train, level: ambiguous, expect: clarify, q: "Who is our best customer?", sql: "CLARIFY: Best by what measure: total revenue, number of orders, or something else?"}
+- {id: t35, split: train, level: ambiguous, expect: clarify, q: "Show me recent orders.", sql: "CLARIFY: What time period or how many orders do you mean by recent?"}
+- {id: t36, split: train, level: medium, q: "Which employees were hired before 1993?", sql: "SELECT FirstName || ' ' || LastName FROM Employees WHERE strftime('%Y', HireDate) < '1993'"}
+# --- TEST (extra): value mapping / linking ---
+- {id: v01, split: test, level: easy, q: "How many customers are from the United Kingdom?", sql: "SELECT COUNT(*) FROM Customers WHERE Country = 'UK'"}
+- {id: v02, split: test, level: medium, q: "Kaç sipariş Amerika Birleşik Devletleri'ne gönderildi?", sql: "SELECT COUNT(*) FROM Orders WHERE ShipCountry = 'USA'"}
+- {id: v03, split: test, level: medium, q: "total quantity sold of queso cabrales", sql: "SELECT SUM(od.Quantity) FROM \"Order Details\" od JOIN Products p ON p.ProductID = od.ProductID WHERE p.ProductName = 'Queso Cabrales'"}
+- {id: v04, split: test, level: medium, q: "What is the contact name of 'Toms Spezialitaten'?", sql: "SELECT ContactName FROM Customers WHERE CompanyName = 'Toms Spezialitäten'"}
+- {id: v05, split: test, level: medium, q: "List the products in the Dairy category.", sql: "SELECT p.ProductName FROM Products p JOIN Categories c ON c.CategoryID = p.CategoryID WHERE c.CategoryName = 'Dairy Products'"}
+- {id: v06, split: test, level: easy, q: "How many employees have the title 'Sales Rep'?", sql: "SELECT COUNT(*) FROM Employees WHERE Title = 'Sales Representative'"}
+- {id: v07, split: test, level: medium, q: "How many orders were shipped with Speedy?", sql: "SELECT COUNT(*) FROM Orders o JOIN Shippers s ON s.ShipperID = o.ShipVia WHERE s.CompanyName = 'Speedy Express'"}
+- {id: v08, split: test, level: medium, q: "How many discontinued products are in the Beverages category?", sql: "SELECT COUNT(*) FROM Products p JOIN Categories c ON c.CategoryID = p.CategoryID WHERE c.CategoryName = 'Beverages' AND p.Discontinued = '1'"}
+- {id: v09, split: test, level: medium, q: "Which customers have the contact title 'owner'?", sql: "SELECT CompanyName FROM Customers WHERE ContactTitle = 'Owner'"}
+# --- TEST (extra): harder SQL ---
+- {id: h01, split: test, level: hard, q: "Which employees never handled an order shipped to Spain? Give full names.", sql: "SELECT e.FirstName || ' ' || e.LastName FROM Employees e WHERE NOT EXISTS (SELECT 1 FROM Orders o WHERE o.EmployeeID = e.EmployeeID AND o.ShipCountry = 'Spain')"}
+- {id: h02, split: test, level: hard, q: "For each customer, the date of their first order.", sql: "SELECT CustomerID, MIN(OrderDate) FROM Orders GROUP BY CustomerID"}
+- {id: h03, split: test, level: hard, q: "Average order value per ship country, only for countries with at least 5 orders.", sql: "SELECT o.ShipCountry, ROUND(SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) / COUNT(DISTINCT o.OrderID), 2) FROM Orders o JOIN \"Order Details\" od ON od.OrderID = o.OrderID GROUP BY o.ShipCountry HAVING COUNT(DISTINCT o.OrderID) >= 5"}
+- {id: h04, split: test, level: hard, q: "Rank employees by total revenue. Show full name and rank.", sql: "SELECT name, RANK() OVER (ORDER BY rev DESC) FROM (SELECT e.FirstName || ' ' || e.LastName AS name, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS rev FROM Orders o JOIN \"Order Details\" od ON od.OrderID = o.OrderID JOIN Employees e ON e.EmployeeID = o.EmployeeID GROUP BY e.EmployeeID)"}
+- {id: h05, split: test, level: hard, q: "Show the running (cumulative) revenue by month for 1996.", sql: "SELECT m, SUM(rev) OVER (ORDER BY m) FROM (SELECT strftime('%Y-%m', o.OrderDate) AS m, SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) AS rev FROM Orders o JOIN \"Order Details\" od ON od.OrderID = o.OrderID WHERE strftime('%Y', o.OrderDate) = '1996' GROUP BY m)"}
+- {id: h06, split: test, level: hard, q: "What percentage of total revenue does each category contribute?", sql: "SELECT c.CategoryName, ROUND(100.0 * SUM(od.UnitPrice * od.Quantity * (1 - od.Discount)) / (SELECT SUM(UnitPrice * Quantity * (1 - Discount)) FROM \"Order Details\"), 2) FROM \"Order Details\" od JOIN Products p ON p.ProductID = od.ProductID JOIN Categories c ON c.CategoryID = p.CategoryID GROUP BY c.CategoryName"}
+- {id: h07, split: test, level: medium, q: "How many orders have freight above the average freight of all orders?", sql: "SELECT COUNT(*) FROM Orders WHERE Freight > (SELECT AVG(Freight) FROM Orders)"}
+- {id: h08, split: test, level: medium, q: "Hangi tedarikçiler 3'ten fazla ürün sağlıyor?", sql: "SELECT s.CompanyName FROM Suppliers s JOIN Products p ON p.SupplierID = s.SupplierID GROUP BY s.SupplierID HAVING COUNT(*) > 3"}
+- {id: h09, split: test, level: hard, q: "How many orders were shipped more than 10 days after the order date?", sql: "SELECT COUNT(*) FROM Orders WHERE julianday(ShippedDate) - julianday(OrderDate) > 10"}
+- {id: h10, split: test, level: hard, q: "List every employee with the full name of their manager.", sql: "SELECT e.FirstName || ' ' || e.LastName, m.FirstName || ' ' || m.LastName FROM Employees e LEFT JOIN Employees m ON m.EmployeeID = e.ReportsTo"}
+- {id: h11, split: test, level: hard, q: "Which categories have no discontinued products?", sql: "SELECT c.CategoryName FROM Categories c WHERE NOT EXISTS (SELECT 1 FROM Products p WHERE p.CategoryID = c.CategoryID AND p.Discontinued = '1')"}
+- {id: h12, split: test, level: hard, q: "Which product was bought by the largest number of distinct customers?", sql: "SELECT p.ProductName FROM \"Order Details\" od JOIN Orders o ON o.OrderID = od.OrderID JOIN Products p ON p.ProductID = od.ProductID GROUP BY p.ProductID ORDER BY COUNT(DISTINCT o.CustomerID) DESC LIMIT 1"}
+# --- TEST (extra): unanswerable / ambiguous / unsafe ---
+- {id: u01, split: test, level: unanswerable, expect: cannot_answer, q: "What was our customer churn rate last year?", sql: ""}
+- {id: u02, split: test, level: unanswerable, expect: cannot_answer, q: "Which products contain organic ingredients?", sql: ""}
+- {id: u03, split: test, level: unanswerable, expect: cannot_answer, q: "Çalışanların maaşlarını göster.", sql: ""}
+- {id: u04, split: test, level: unanswerable, expect: cannot_answer, q: "Delete all discontinued products from the database.", sql: ""}
+- {id: a01, split: test, level: ambiguous, expect: clarify, q: "Show me the top customers.", sql: ""}
+- {id: a02, split: test, level: ambiguous, expect: clarify, q: "Which employee is the most productive?", sql: ""}
+- {id: a03, split: test, level: ambiguous, expect: clarify, q: "Compare our sales.", sql: ""}

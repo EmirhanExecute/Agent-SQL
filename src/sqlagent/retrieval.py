@@ -1,6 +1,8 @@
 """Few-shot retrieval: embed train (question, SQL) pairs and return the nearest ones for a new question."""
 import hashlib
 import json
+import os
+import threading
 from functools import lru_cache
 from pathlib import Path
 
@@ -13,21 +15,34 @@ EMB_CACHE = Path("eval/.cache/emb.json")
 QUESTIONS_PATH = "eval/questions.yaml"
 
 
+_LOCK = threading.Lock()
+_MEM: dict | None = None
+
+
 def _load_cache() -> dict:
-    return json.loads(EMB_CACHE.read_text()) if EMB_CACHE.exists() else {}
+    global _MEM
+    if _MEM is None:
+        try:
+            _MEM = json.loads(EMB_CACHE.read_text()) if EMB_CACHE.exists() else {}
+        except json.JSONDecodeError:  # corrupt file from an interrupted write: rebuild
+            _MEM = {}
+    return _MEM
 
 
 def _embed(texts: list[str]) -> np.ndarray:
-    cache = _load_cache()
-    keys = [hashlib.sha256(t.encode()).hexdigest() for t in texts]
-    missing = [(k, t) for k, t in zip(keys, texts) if k not in cache]
-    if missing:
-        vecs = GoogleGenerativeAIEmbeddings(model=EMB_MODEL).embed_documents([t for _, t in missing])
-        cache = _load_cache()  # re-read: another thread may have written meanwhile
-        cache.update({k: v for (k, _), v in zip(missing, vecs)})
-        EMB_CACHE.parent.mkdir(parents=True, exist_ok=True)
-        EMB_CACHE.write_text(json.dumps(cache))
-    arr = np.array([cache[k] for k in keys], dtype=np.float32)
+    """Thread-safe: one lock around cache access, atomic file replace on write."""
+    with _LOCK:
+        cache = _load_cache()
+        keys = [hashlib.sha256(t.encode()).hexdigest() for t in texts]
+        missing = [(k, t) for k, t in zip(keys, texts) if k not in cache]
+        if missing:
+            vecs = GoogleGenerativeAIEmbeddings(model=EMB_MODEL).embed_documents([t for _, t in missing])
+            cache.update({k: v for (k, _), v in zip(missing, vecs)})
+            EMB_CACHE.parent.mkdir(parents=True, exist_ok=True)
+            tmp = EMB_CACHE.with_suffix(".tmp")
+            tmp.write_text(json.dumps(cache))
+            os.replace(tmp, EMB_CACHE)
+        arr = np.array([cache[k] for k in keys], dtype=np.float32)
     return arr / np.linalg.norm(arr, axis=1, keepdims=True)
 
 
