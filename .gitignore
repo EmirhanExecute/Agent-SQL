@@ -7,3 +7,5 @@ eval/results/
 eval/.cache/
 data/*.db
 data/raw/
+.ua/
+.understand-anything/

@@ -13,6 +13,8 @@ class Validation:
     ok: bool
     sql: str = ""        # normalized + LIMIT-enforced SQL when ok
     reason: str = ""     # explanation (fed back to the model for repair) when rejected
+    probe_sql: str = ""  # same query with LIMIT max_rows+1; set only when we added/lowered the LIMIT, so that
+                         # running it reveals whether rows were cut off
 
 
 def _reject(reason: str) -> Validation:
@@ -64,6 +66,10 @@ def validate_sql(sql: str, allowed_tables: list[str], max_rows: int = MAX_ROWS) 
 
     limit = tree.args.get("limit")
     current = limit.expression if limit else None
+    probe_sql = ""
     if not (isinstance(current, exp.Literal) and current.is_int and int(current.name) <= max_rows):
+        probe = tree.copy()
+        probe.set("limit", exp.Limit(expression=exp.Literal.number(max_rows + 1)))
+        probe_sql = probe.sql(dialect="sqlite")
         tree.set("limit", exp.Limit(expression=exp.Literal.number(max_rows)))
-    return Validation(True, sql=tree.sql(dialect="sqlite"))
+    return Validation(True, sql=tree.sql(dialect="sqlite"), probe_sql=probe_sql)

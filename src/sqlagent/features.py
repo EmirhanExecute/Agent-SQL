@@ -21,3 +21,6 @@ PRESETS: dict[str, Features] = {
     "tables": Features(few_shot=True, repair=True, value_dict=True, value_linking=True, table_select=True),
     "full": Features(few_shot=True, repair=True, value_dict=True, value_linking=True, table_select=True, memory=True),
 }
+
+# The app (CLI and UI) always runs with everything on; the other presets exist for eval/run_eval.py.
+DEFAULT = PRESETS["full"]

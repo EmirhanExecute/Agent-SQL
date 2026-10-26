@@ -1,17 +1,13 @@
-import argparse
 import sys
 
-from .features import PRESETS
+from .config import MAX_ROWS
 from .graph import build_graph
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--preset", default="full", choices=PRESETS)
-    args = ap.parse_args()
-    graph = build_graph(PRESETS[args.preset])
+    graph = build_graph()
     history: list[dict] = []
-    print(f"SQL ajanı hazır (preset={args.preset}). Çıkış: boş satır / Ctrl+C")
+    print("SQL ajanı hazır. Çıkış: boş satır / Ctrl+C")
     while True:
         try:
             q = input("\nSoru> ").strip()
@@ -23,6 +19,8 @@ def main() -> None:
         history.append({"q": out["standalone"], "sql": out.get("sql", "")})
         print(f"\nSQL ({out['attempts']} deneme, {out['tokens']} token):\n{out.get('sql', '')}\n")
         print(out["answer"])
+        if out.get("truncated"):
+            print(f"\n({MAX_ROWS}+ satır, ilk {MAX_ROWS} gösteriliyor)")
 
 
 if __name__ == "__main__":

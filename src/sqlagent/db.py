@@ -88,3 +88,10 @@ def run_query(sql: str, db_path: str = DB_PATH, max_rows: int = MAX_ROWS) -> tup
         cols = [d[0] for d in cur.description or []]
         rows = cur.fetchmany(max_rows)
     return cols, rows
+
+
+def run_limited(sql: str, probe_sql: str = "", db_path: str = DB_PATH, max_rows: int = MAX_ROWS):
+    """Run a validated query. Returns (columns, rows, truncated): at most max_rows rows, and whether more existed.
+    probe_sql (LIMIT max_rows+1) is what reveals the extra row; without it the query's own LIMIT was kept."""
+    cols, rows = run_query(probe_sql or sql, db_path, max_rows + 1)
+    return cols, rows[:max_rows], len(rows) > max_rows

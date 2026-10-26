@@ -11,7 +11,7 @@ import plotly.express as px  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from i18n import LANGUAGES, STRINGS  # noqa: E402
-from sqlagent.features import PRESETS  # noqa: E402
+from sqlagent.config import MAX_ROWS  # noqa: E402
 from sqlagent.graph import build_graph  # noqa: E402
 from sqlagent.viz import choose_chart  # noqa: E402
 
@@ -21,8 +21,8 @@ st.set_page_config(page_title="SQL Agent", page_icon=":material/database:", layo
 
 
 @st.cache_resource
-def get_graph(preset: str, db_path: str):
-    return build_graph(PRESETS[preset], with_answer=True, db_path=db_path)
+def get_graph(db_path: str):
+    return build_graph(with_answer=True, db_path=db_path)  # always the full configuration
 
 
 # Language is a UI-only setting: the agent answers in the language of the question on its own.
@@ -66,6 +66,8 @@ def render_assistant(m: dict) -> None:
             st.code(m["sql"], language="sql")
     if m.get("df") is not None and not m["df"].empty:
         st.dataframe(m["df"], use_container_width=True, hide_index=True)
+        if m.get("truncated"):
+            st.caption(t("truncated", n=MAX_ROWS))
         render_chart(m["df"], choose_chart(list(m["df"].columns), [tuple(r) for r in m["df"].itertuples(index=False)]))
     if m.get("stats"):
         st.caption(t("meta", **m["stats"]))  # formatted at render time so it follows the UI language
@@ -79,7 +81,6 @@ with st.sidebar:
         st.rerun()
     st.title(t("title"))
     db_key = st.selectbox(t("database"), list(DBS), format_func=t)
-    preset = st.selectbox(t("config"), list(PRESETS), index=list(PRESETS).index("full"), help=t("config_help"))
     st.caption(t("safety"))
     if st.button(t("clear")):
         st.session_state.messages = []
@@ -107,13 +108,14 @@ if question:
     with st.chat_message("assistant"):
         with st.spinner(t("spinner")):
             try:
-                out = get_graph(preset, DBS[db_key]).invoke({"question": question, "history": history})
+                out = get_graph(DBS[db_key]).invoke({"question": question, "history": history})
                 cols, rows = out.get("columns", []), out.get("rows", [])
                 msg = {
                     "role": "assistant", "content": out.get("answer", ""),
                     "sql": out.get("sql", "") if not out.get("abstain") else "", "standalone": out["standalone"],
                     "abstain": out.get("abstain", ""), "blocked": out.get("blocked", False) and bool(out.get("error")),
                     "df": pd.DataFrame(rows, columns=cols) if rows and not out.get("error") else None,
+                    "truncated": out.get("truncated", False),
                     "stats": {"attempts": out["attempts"], "tokens": out["tokens"], "rows": len(rows)},
                 }
             except Exception as e:  # keep the chat alive on API/network failures

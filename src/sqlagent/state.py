@@ -10,6 +10,8 @@ class AgentState(TypedDict, total=False):
     hints: list[str]
     examples: list[dict]
     sql: str
+    probe_sql: str           # LIMIT max_rows+1 variant used to detect truncation ('' when not applicable)
+    truncated: bool          # more than max_rows rows existed; rows holds the first max_rows
     error: str
     blocked: bool
     abstain: str             # '' | 'cannot_answer' | 'clarify'
