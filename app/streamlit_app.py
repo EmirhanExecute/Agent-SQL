@@ -2,25 +2,22 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "app"))
 
 import pandas as pd  # noqa: E402
 import plotly.express as px  # noqa: E402
 import streamlit as st  # noqa: E402
 
+from i18n import LANGUAGES, STRINGS  # noqa: E402
 from sqlagent.features import PRESETS  # noqa: E402
 from sqlagent.graph import build_graph  # noqa: E402
 from sqlagent.viz import choose_chart  # noqa: E402
 
-DBS = {"Northwind (küçük örnek)": "data/northwind_small.db", "Northwind (tam)": "data/northwind_full.db"}
-EXAMPLES = [
-    "En çok sipariş veren 5 müşteri kim?",
-    "Total revenue per product category",
-    "1996 yılında aylık sipariş sayısı",
-    "Which employees never handled an order shipped to Spain?",
-]
+DBS = {"db_small": "data/northwind_small.db", "db_full": "data/northwind_full.db"}
 
-st.set_page_config(page_title="SQL Ajanı", page_icon=":material/database:", layout="wide")
+st.set_page_config(page_title="SQL Agent", page_icon=":material/database:", layout="wide")
 
 
 @st.cache_resource
@@ -28,10 +25,20 @@ def get_graph(preset: str, db_path: str):
     return build_graph(PRESETS[preset], with_answer=True, db_path=db_path)
 
 
+# Language is a UI-only setting: the agent answers in the language of the question on its own.
+st.session_state.setdefault("lang", "tr")
+st.session_state.setdefault("messages", [])
+
+
+def t(key: str, **kw):
+    text = STRINGS[st.session_state.lang][key]
+    return text.format(**kw) if kw else text
+
+
 def render_chart(df: pd.DataFrame, spec) -> None:
     if spec.kind == "none":
         if spec.reason and len(df) >= 2:  # single-row results need no explanation
-            st.caption(spec.reason)
+            st.caption(t(f"chart_{spec.reason}"))
         return
     plot = px.line if spec.kind == "line" else px.bar
     kwargs = {"markers": True} if spec.kind == "line" else {"barmode": "group"}
@@ -45,42 +52,44 @@ def render_chart(df: pd.DataFrame, spec) -> None:
 
 
 def render_assistant(m: dict) -> None:
-    kind = m.get("abstain")
+    if m.get("error"):
+        st.error(t("error", err=m["error"]))
+        return
     if m.get("blocked"):
         st.warning(m["content"])
-    elif kind == "clarify":
-        st.info(m["content"])
-    elif kind == "cannot_answer":
+    elif m.get("abstain"):
         st.info(m["content"])
     else:
-        st.markdown(m["content"])
+        st.markdown(m["content"] or t("no_result"))
     if m.get("sql"):
-        with st.expander("Kullanılan SQL"):
+        with st.expander(t("used_sql")):
             st.code(m["sql"], language="sql")
     if m.get("df") is not None and not m["df"].empty:
         st.dataframe(m["df"], use_container_width=True, hide_index=True)
         render_chart(m["df"], choose_chart(list(m["df"].columns), [tuple(r) for r in m["df"].itertuples(index=False)]))
-    if m.get("meta"):
-        st.caption(m["meta"])
+    if m.get("stats"):
+        st.caption(t("meta", **m["stats"]))  # formatted at render time so it follows the UI language
 
 
 with st.sidebar:
-    st.title("SQL Ajanı")
-    db_label = st.selectbox("Veritabanı", list(DBS))
-    preset = st.selectbox("Yapılandırma", list(PRESETS), index=list(PRESETS).index("full"),
-                          help="Ablasyondaki kümülatif özellik setleri; 'full' hepsini açar.")
-    st.caption("Yalnızca SELECT çalışır; salt okunur bağlantı, 100 satır sınırı, 5 sn zaman aşımı, "
-               "telefon/adres gibi kolonlar gizli.")
-    if st.button("Sohbeti temizle"):
+    lang_label = st.radio(t("language"), list(LANGUAGES), horizontal=True,
+                          index=list(LANGUAGES.values()).index(st.session_state.lang))
+    if LANGUAGES[lang_label] != st.session_state.lang:
+        st.session_state.lang = LANGUAGES[lang_label]
+        st.rerun()
+    st.title(t("title"))
+    db_key = st.selectbox(t("database"), list(DBS), format_func=t)
+    preset = st.selectbox(t("config"), list(PRESETS), index=list(PRESETS).index("full"), help=t("config_help"))
+    st.caption(t("safety"))
+    if st.button(t("clear")):
         st.session_state.messages = []
         st.rerun()
     st.divider()
-    st.caption("Örnek sorular")
-    for ex in EXAMPLES:
+    st.caption(t("examples_title"))
+    for ex in STRINGS[st.session_state.lang]["examples"]:
         if st.button(ex, use_container_width=True):
             st.session_state.pending = ex
 
-st.session_state.setdefault("messages", [])
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         if m["role"] == "assistant":
@@ -88,7 +97,7 @@ for m in st.session_state.messages:
         else:
             st.markdown(m["content"])
 
-question = st.chat_input("Veritabanına bir soru sorun") or st.session_state.pop("pending", None)
+question = st.chat_input(t("chat_input")) or st.session_state.pop("pending", None)
 if question:
     history = [{"q": m["standalone"], "sql": m["sql"]} for m in st.session_state.messages
               if m["role"] == "assistant" and m.get("sql")]
@@ -96,18 +105,18 @@ if question:
     with st.chat_message("user"):
         st.markdown(question)
     with st.chat_message("assistant"):
-        with st.spinner("Sorgu hazırlanıyor..."):
+        with st.spinner(t("spinner")):
             try:
-                out = get_graph(preset, DBS[db_label]).invoke({"question": question, "history": history})
+                out = get_graph(preset, DBS[db_key]).invoke({"question": question, "history": history})
                 cols, rows = out.get("columns", []), out.get("rows", [])
                 msg = {
-                    "role": "assistant", "content": out.get("answer") or "Sonuç bulunamadı.",
+                    "role": "assistant", "content": out.get("answer", ""),
                     "sql": out.get("sql", "") if not out.get("abstain") else "", "standalone": out["standalone"],
                     "abstain": out.get("abstain", ""), "blocked": out.get("blocked", False) and bool(out.get("error")),
                     "df": pd.DataFrame(rows, columns=cols) if rows and not out.get("error") else None,
-                    "meta": f"{out['attempts']} deneme · {out['tokens']} token · {len(rows)} satır",
+                    "stats": {"attempts": out["attempts"], "tokens": out["tokens"], "rows": len(rows)},
                 }
             except Exception as e:  # keep the chat alive on API/network failures
-                msg = {"role": "assistant", "content": f"Bir hata oluştu: {e}", "sql": "", "standalone": question}
+                msg = {"role": "assistant", "content": "", "error": str(e), "sql": "", "standalone": question}
         render_assistant(msg)
     st.session_state.messages.append(msg)
