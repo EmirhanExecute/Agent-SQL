@@ -48,10 +48,14 @@ def run_agent(monkeypatch, sql: str):
         if system.startswith("You are a SQLite expert"):
             return LLMResult(f"```sql\n{sql}\n```", 0, 0.0)
         seen["answer_prompt"] = user
+        seen["answer_system"] = system
         return LLMResult("ok", 0, 0.0)
 
     monkeypatch.setattr(graph_mod, "call", fake_call)
     out = graph_mod.build_graph(Features()).invoke({"question": "q", "history": []})
+    # The "only some rows shown" instruction must live in the note, never in the system prompt: otherwise the model
+    # invents the caveat even when every row was shown.
+    assert "cannot see" not in seen["answer_system"]
     return out, seen["answer_prompt"]
 
 

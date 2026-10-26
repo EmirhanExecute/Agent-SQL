@@ -65,7 +65,8 @@ def render_assistant(m: dict) -> None:
         with st.expander(t("used_sql")):
             st.code(m["sql"], language="sql")
     if m.get("df") is not None and not m["df"].empty:
-        st.dataframe(m["df"], use_container_width=True, hide_index=True)
+        left = {c: st.column_config.Column(alignment="left") for c in m["df"].columns}  # numbers too, for readability
+        st.dataframe(m["df"], use_container_width=True, hide_index=True, column_config=left)
         if m.get("truncated"):
             st.caption(t("truncated", n=MAX_ROWS))
         render_chart(m["df"], choose_chart(list(m["df"].columns), [tuple(r) for r in m["df"].itertuples(index=False)]))
