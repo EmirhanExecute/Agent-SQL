@@ -18,6 +18,17 @@ import yaml
 sys.path.insert(0, "src")
 os.environ.setdefault("LLM_CACHE", "1")
 
+# --provider / --model must be applied before sqlagent is imported (config reads the environment at import time)
+_pre = argparse.ArgumentParser(add_help=False)
+_pre.add_argument("--provider")
+_pre.add_argument("--model")
+_known, _ = _pre.parse_known_args()
+if _known.provider:
+    os.environ["LLM_PROVIDER"] = _known.provider
+if _known.model:
+    os.environ["MODEL_NAME"] = _known.model
+
+from sqlagent.config import MODEL_NAME, PROVIDER  # noqa: E402
 from sqlagent.features import PRESETS  # noqa: E402
 from sqlagent.graph import build_graph  # noqa: E402
 
@@ -110,6 +121,8 @@ def main() -> None:
     ap.add_argument("--configs", default="baseline,fewshot,repair,values,tables")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--only", default="", help="comma-separated question ids")
+    ap.add_argument("--provider", help="gemini | anthropic (default: LLM_PROVIDER env, else gemini)")
+    ap.add_argument("--model", help="model name (default: provider's default, or MODEL_NAME env)")
     args = ap.parse_args()
 
     db_path = f"data/northwind_{args.db}.db"
@@ -133,12 +146,13 @@ def main() -> None:
         s = summaries[-1]
         print(f"{name:<10} {s['correct']}/{s['n']}  tokens/q={s['tokens']:.0f}  attempts/q={s['attempts']:.2f}", flush=True)
 
-    table = print_table(summaries, f"{args.db} DB, {args.split} split, {len(qs)} questions")
+    table = print_table(summaries, f"{args.db} DB, {args.split} split, {len(qs)} questions, {PROVIDER}:{MODEL_NAME}")
     out_dir = Path("eval/results")
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    (out_dir / f"{stamp}-{args.db}.json").write_text(json.dumps(details, indent=1, ensure_ascii=False), encoding="utf-8")
-    (out_dir / f"{stamp}-{args.db}.md").write_text(table, encoding="utf-8")
+    tag = f"{args.db}-{PROVIDER}"
+    (out_dir / f"{stamp}-{tag}.json").write_text(json.dumps(details, indent=1, ensure_ascii=False), encoding="utf-8")
+    (out_dir / f"{stamp}-{tag}.md").write_text(table, encoding="utf-8")
     fails = [(n, r) for n, rs in details.items() for r in rs if not r["correct"] and n == args.configs.split(",")[-1]]
     for n, r in fails[:15]:
         print(f"[{n}] FAIL {r['id']}: {r['error'] or 'wrong result'}\n     {r['sql'][:200]}")

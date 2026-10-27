@@ -6,9 +6,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from langchain_google_genai import ChatGoogleGenerativeAI
-
-from .config import MODEL_NAME
+from .config import MODEL_NAME, PROVIDER
 
 CACHE_PATH = Path("eval/.cache/llm.sqlite")
 
@@ -20,12 +18,17 @@ class LLMResult:
     seconds: float  # wall time of the original (uncached) call
 
 
-def get_llm() -> ChatGoogleGenerativeAI:
+def get_llm():
+    """Chat model for the configured provider (LLM_PROVIDER=gemini|anthropic, MODEL_NAME overrides the default)."""
+    if PROVIDER == "anthropic":
+        from langchain_anthropic import ChatAnthropic
+        return ChatAnthropic(model=MODEL_NAME, max_tokens=2048)  # no temperature: newer Claude models reject it
+    from langchain_google_genai import ChatGoogleGenerativeAI
     return ChatGoogleGenerativeAI(model=MODEL_NAME, temperature=0)
 
 
 def text_of(msg) -> str:
-    """Gemini returns content as a list of blocks; flatten to plain text."""
+    """Models may return content as a list of blocks (Gemini always does); flatten to plain text."""
     c = msg.content
     if isinstance(c, str):
         return c
@@ -52,7 +55,10 @@ def _cache_put(key: str, value: dict) -> None:
 def call(messages: list[tuple[str, str]]) -> LLMResult:
     """Invoke the model with retries. LLM_CACHE=1 enables a disk cache (LLM_CACHE_SALT forces fresh samples)."""
     use_cache = os.getenv("LLM_CACHE") == "1"
-    key = hashlib.sha256(json.dumps([MODEL_NAME, os.getenv("LLM_CACHE_SALT", ""), messages]).encode()).hexdigest()
+    parts = [MODEL_NAME, os.getenv("LLM_CACHE_SALT", ""), messages]
+    if PROVIDER != "gemini":  # gemini keeps the original key format so existing cached results stay valid
+        parts.insert(0, PROVIDER)
+    key = hashlib.sha256(json.dumps(parts).encode()).hexdigest()
     if use_cache and (hit := _cache_get(key)):
         return LLMResult(**hit)
     last: Exception | None = None
