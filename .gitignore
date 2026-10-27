@@ -9,3 +9,4 @@ data/*.db
 data/raw/
 .ua/
 .understand-anything/
+.claude/
