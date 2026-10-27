@@ -10,6 +10,13 @@ quality feature is switchable so its effect can be **measured**.
 - **Two LLM providers:** Gemini and Claude behind one switch (`LLM_PROVIDER`).
 - **Chat UI** (Streamlit): answer, the SQL that was used, the result table and an automatic chart.
 
+## Example
+
+<img src="docs/img/ui_example.png" alt="Chat UI answering a top-5 revenue question with a table and a chart" width="720">
+
+The chat UI answering "List the top 5 products that generate the most revenue": a one-sentence answer, the SQL that was
+used (collapsed), the result table and an automatic bar chart.
+
 ## How a question flows
 
 ```mermaid
