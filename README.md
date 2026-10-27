@@ -134,3 +134,7 @@ docs/           benchmark.md and the result tables
 
 Per-database profiles and a zero-configuration mode, PostgreSQL support, request tracing (Langfuse), a FastAPI endpoint
 and a Docker image with a hosted demo.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
